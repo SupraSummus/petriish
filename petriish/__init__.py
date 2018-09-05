@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 def attr(name):
     """Mixin that has specified attr settable in constructor and then readonly."""
     private_name = '_' + name
+
     class AttrMixin:
         def __init__(self, *args, **kwargs):
             if len(args) == 0:
@@ -20,6 +21,7 @@ def attr(name):
                 setattr(self, private_name, args.pop())
             super().__init__(*args, **kwargs)
     setattr(AttrMixin, name, property(lambda self: getattr(self, private_name)))
+
     return AttrMixin
 
 
@@ -58,10 +60,13 @@ class Sequence(WorkflowPattern, attr('children')):
     class State(WorkflowPattern.State):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
+            self._started = False
             self._next_child = 0
             self._child_state = None
 
         def start(self):
+            assert not self._started
+            self._started = True
             self._start_child()
 
         def process_ended(self, pid, status):
@@ -73,11 +78,13 @@ class Sequence(WorkflowPattern, attr('children')):
 
         @property
         def status(self):
+            if not self._started:
+                return Status.NEW
             if self._child_state is not None:
                 return self._child_state.status
             if self._next_child >= len(self.pattern.children):
                 return Status.SUCCEEDED
-            return Status.NEW
+            assert False
 
         def _start_child(self):
             while True:
