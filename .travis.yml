@@ -3,6 +3,8 @@ python:
   - "3.6"
 install:
   - pip install -r requirements.txt
+  - pip install coverage codecov
 script:
   - python setup.py flake8
-  - python setup.py test
+  - coverage run --source=petriish/ setup.py test
+  - codecov
