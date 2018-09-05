@@ -24,7 +24,7 @@ Workflow tree has following type of nodes:
 
  * **alternative**
 
-   Execute excatly one of many *sub-workflows*. To ensure deterministic behaviour one *sub-workflow* must suceed and all others must fail. If this is not the case while alternative fails. Alternative of length zero fails immediately.
+   Execute excatly one of many *sub-workflows*. To ensure deterministic behaviour one *sub-workflow* must suceed and all others must fail. If this is not the case alternative fails. Alternative of length zero fails immediately.
 
  * **parallelization**
 

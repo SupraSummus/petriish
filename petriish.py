@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def attr(name):
-    """ Mixin that has specified attr settable in constructor and then readonly. """
+    """Mixin that has specified attr settable in constructor and then readonly."""
     private_name = '_' + name
     class AttrMixin:
         def __init__(self, *args, **kwargs):
@@ -31,17 +31,22 @@ class Status(Enum):
 
 
 class WorkflowPattern:
+    """A type o workflow pattern"""
+
     def instantiate(self):
         return self.State(
             pattern=self,
         )
 
     class State(attr('pattern')):
+        """Specific instance of worflow pattern"""
+
         def start(self):
+            """Start computation. Must be non-blocking."""
             raise NotImplementedError()
 
         def process_ended(self, pid, status):
-            """ Call to notify that a process has ended. """
+            """Call to notify that a process has ended."""
             raise NotImplementedError()
 
         @property
@@ -236,15 +241,6 @@ class Command(WorkflowPattern, attr('command')):
                 return Status.SUCCEEDED
             else:
                 return Status.FAILED
-
-        @property
-        def pids(self):
-            if self._process is None:
-                return set()
-            if self._process.returncode is not None:
-                return set()
-            else:
-                return {self._process.pid}
 
 
 def run_workflow_pattern(workflow_pattern):
