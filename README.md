@@ -1,6 +1,8 @@
 Petriish
 ========
 
+[![Build Status](https://travis-ci.com/SupraSummus/petriish.svg?branch=master)](https://travis-ci.com/SupraSummus/petriish)
+
 Structural workflow engine for running cascades of processes. Inspired by structural Petri workflow nets (hierarchical workflow nets?).
 
 Advantages
