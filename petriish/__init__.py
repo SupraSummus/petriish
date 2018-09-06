@@ -7,18 +7,27 @@ from collections import Counter
 logger = logging.getLogger(__name__)
 
 
-def attr(name):
+def attr(name, default=None, required=False):
     """Mixin that has specified attr settable in constructor and then readonly."""
     private_name = '_' + name
 
     class AttrMixin:
         def __init__(self, *args, **kwargs):
-            if len(args) == 0:
-                setattr(self, private_name, kwargs[name])
+            if name in kwargs:  # value is in kwargs
+                value = kwargs[name]
                 del kwargs[name]
-            else:
+
+            elif len(args) > 0:  # value is in args
                 args = list(args)
-                setattr(self, private_name, args.pop())
+                value = args.pop()
+
+            elif not required:  # fallback to default value
+                value = default
+
+            else:  # value is required but not supplied
+                raise TypeError('required argument \'{}\' not found'.format(name))
+
+            setattr(self, private_name, value)
             super().__init__(*args, **kwargs)
     setattr(AttrMixin, name, property(lambda self: getattr(self, private_name)))
 
