@@ -19,7 +19,7 @@ class PetriishCommandTestCase(TestCase):
             f.flush()
             result = subprocess.run(
                 ['bin/petriish', f.name],
-                capture_output=True,
+                stdout=subprocess.PIPE,
             )
             self.assertEqual(result.returncode, 0)
             self.assertEqual(
