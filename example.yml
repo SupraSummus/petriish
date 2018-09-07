@@ -1,0 +1,46 @@
+type: sequence
+children:
+  - type: command
+    command: ['echo', 'I have ability to count. Look at ma!']
+  - type: command
+    command: ['echo', 'one']
+  - type: sequence
+    children: []
+  - type: command
+    command: ['echo', 'two']
+  - type: repetition
+    child: {type: command, command: ['false']}
+    exit: {type: command, command: ['true']}
+  - type: command
+    command: ['echo', 'three']
+  - type: alternative
+    children:
+      - type: alternative
+        children: []
+      - type: command
+        command: ['echo', '!']
+      - type: command
+        command: ['false']
+
+  - type: command
+    command: ['echo', 'And now, ladies and gentelmen, a RACE!']
+  - type: parallelization
+    children:
+      - type: sequence
+        children:
+          - type: command
+            command: ['sleep', '1']
+          - type: command
+            command: ['echo', 'player A has completed the race']
+      - type: sequence
+        children:
+          - type: command
+            command: ['sleep', '2']
+          - type: command
+            command: ['echo', 'player B has completed the race']
+      - type: sequence
+        children:
+          - type: command
+            command: ['sleep', '1']
+          - type: command
+            command: ['echo', 'player C has completed the race']

@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+
+import argparse
+import logging
+import signal
+import sys
+import yaml
+
+import petriish
+import petriish.serialization
+
+
+parser = argparse.ArgumentParser(description="Execute workflow pattern.")
+parser.add_argument("file", type=argparse.FileType('r'), help="file containing workflow description")
+parser.add_argument(
+    "-l", "--log",
+    dest='log', default=sys.stderr, type=argparse.FileType('w'),
+    help="where to put logs, use something like /proc/self/fd/5 for logging to custom fd",
+)
+parser.add_argument(
+    "-v", "--verbose",
+    dest='verbose_count', action='count', default=0,
+    help="increases log verbosity for each occurence",
+)
+
+if __name__ == '__main__':
+    arguments = parser.parse_args()
+
+    # Sets log level to WARN going more verbose for each new -v.
+    logging.basicConfig(
+        format='%(process)d %(levelname)s: %(message)s',
+        level=max(3 - arguments.verbose_count, 0) * 10,
+        stream=arguments.log,
+    )
+
+    logging.debug("Hi, this is petriish speaking. Running with commandline {}.".format(sys.argv))
+
+    logging.debug("Reading description.")
+    description = yaml.load(arguments.file)
+    arguments.file.close()
+
+    logging.debug("Constructing and checking the workflow.")
+    workflow = petriish.serialization.deserialize(description)
+
+    logging.debug("Executing the workflow.")
+    status = petriish.run_workflow_pattern(workflow)
+
+    logging.debug("See ya. It was petriish speaking.")
+    if status == petriish.Status.SUCCEEDED:
+        sys.exit(0)
+    elif status == petriish.Status.FAILED:
+        sys.exit(1)
+    else:
+        assert False

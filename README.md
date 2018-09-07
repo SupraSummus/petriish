@@ -44,4 +44,4 @@ Workflow tree has following type of nodes:
 Example
 -------
 
-Check out `example.py`
+Check out `petriish example.yml`
