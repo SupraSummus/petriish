@@ -14,6 +14,10 @@ setup(
     ],
     keywords='petri workflow',
     py_modules=['petriish'],
-    scripts=[],
-    install_requires=[],
+    scripts=[
+        'bin/petriish',
+    ],
+    install_requires=[
+        'pyyaml',
+    ],
 )

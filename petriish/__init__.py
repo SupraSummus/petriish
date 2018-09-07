@@ -2,36 +2,12 @@ import os
 import logging
 import subprocess
 from enum import Enum
-from collections import Counter
+from collections import Counter, namedtuple
+
+from .utils import attr
+
 
 logger = logging.getLogger(__name__)
-
-
-def attr(name, default=None, required=False):
-    """Mixin that has specified attr settable in constructor and then readonly."""
-    private_name = '_' + name
-
-    class AttrMixin:
-        def __init__(self, *args, **kwargs):
-            if name in kwargs:  # value is in kwargs
-                value = kwargs[name]
-                del kwargs[name]
-
-            elif len(args) > 0:  # value is in args
-                args = list(args)
-                value = args.pop()
-
-            elif not required:  # fallback to default value
-                value = default
-
-            else:  # value is required but not supplied
-                raise TypeError('required argument \'{}\' not found'.format(name))
-
-            setattr(self, private_name, value)
-            super().__init__(*args, **kwargs)
-    setattr(AttrMixin, name, property(lambda self: getattr(self, private_name)))
-
-    return AttrMixin
 
 
 class Status(Enum):
@@ -65,7 +41,7 @@ class WorkflowPattern:
             raise NotImplementedError()
 
 
-class Sequence(WorkflowPattern, attr('children')):
+class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
     class State(WorkflowPattern.State):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -107,7 +83,7 @@ class Sequence(WorkflowPattern, attr('children')):
                     return
 
 
-class Parallelization(WorkflowPattern, attr('children')):
+class Parallelization(WorkflowPattern, namedtuple('Sequence', ('children'))):
     class State(WorkflowPattern.State):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -149,7 +125,7 @@ class Parallelization(WorkflowPattern, attr('children')):
             assert False
 
 
-class Alternative(WorkflowPattern, attr('children')):
+class Alternative(WorkflowPattern, namedtuple('Sequence', ('children'))):
     class State(WorkflowPattern.State):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -192,7 +168,7 @@ class Alternative(WorkflowPattern, attr('children')):
                 return Status.FAILED
 
 
-class Repetition(WorkflowPattern, attr('child'), attr('exit')):
+class Repetition(WorkflowPattern, namedtuple('Sequence', ('child', 'exit'))):
     class State(WorkflowPattern.State):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -231,7 +207,7 @@ class Repetition(WorkflowPattern, attr('child'), attr('exit')):
             assert False
 
 
-class Command(WorkflowPattern, attr('command')):
+class Command(WorkflowPattern, namedtuple('Sequence', ('command'))):
     class State(WorkflowPattern.State):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
