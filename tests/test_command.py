@@ -26,4 +26,3 @@ class PetriishCommandTestCase(TestCase):
                 sorted(result.stdout.decode('utf8').strip().split('\n')),
                 ['aaa', 'bbb'],
             )
-

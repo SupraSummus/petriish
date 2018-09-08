@@ -21,13 +21,6 @@ def attr(name, default=None, required=False):
             setattr(self, private_name, value)
             super().__init__(*args, **kwargs)
 
-        def __eq__(self, other):
-            return (
-                hasattr(other, name) and
-                getattr(other, name) == getattr(other, name) and
-                super().__eq__(other)
-            )
-
     setattr(AttrMixin, name, property(lambda self: getattr(self, private_name)))
 
     return AttrMixin
