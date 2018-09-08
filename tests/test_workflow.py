@@ -15,11 +15,11 @@ class DummyCommand(petriish.WorkflowPattern):
         self.semaphore.release()
         self.feedback_semaphore.acquire()
 
-    class State(petriish.WorkflowPattern.State):
-        def execute(self):
-            self.pattern.semaphore.acquire()
-            return self.pattern.result
+    def execute(self):
+        self.semaphore.acquire()
+        return self.result
 
+    class State(petriish.WorkflowPattern.State):
         def run(self):
             super().run()
             self.pattern.feedback_semaphore.release()
@@ -27,18 +27,18 @@ class DummyCommand(petriish.WorkflowPattern):
 
 class WorkflowPatternAssertsMixin:
     def assertNotFinished(self, state):
-        self.assertFalse(state.finished.is_set())
+        self.assertFalse(state.finished)
         with self.assertRaises(RuntimeError):
             state.succeeded
 
     def assertSucceeded(self, state):
         state.join(timeout=1)
-        self.assertTrue(state.finished.is_set())
+        self.assertTrue(state.finished)
         self.assertTrue(state.succeeded)
 
     def assertFailed(self, state):
         state.join(timeout=1)
-        self.assertTrue(state.finished.is_set())
+        self.assertTrue(state.finished)
         self.assertFalse(state.succeeded)
 
 

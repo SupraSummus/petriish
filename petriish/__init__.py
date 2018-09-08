@@ -8,34 +8,42 @@ logger = logging.getLogger(__name__)
 
 
 class WorkflowPattern:
-    """A type o workflow pattern"""
+    """A type of workflow pattern"""
 
     def instantiate(self):
         return self.State(
             pattern=self,
         )
 
+    def execute(self):
+        """Override this method to customize workflow type behaviour.
+
+        It should return weather the execution has been successful (bool).
+        """
+        raise NotImplementedError()
+
     class State(threading.Thread):
-        """Specific instance of worflow pattern"""
+        """Specific instance of worfklow pattern"""
 
         def __init__(self, pattern, **kwargs):
             self.__pattern = pattern
-            self.finished = threading.Event()
+            self.__finished = threading.Event()
             self.__succeeded = None
             super().__init__(**kwargs)
 
         def run(self):
-            self.__succeeded = self.execute()
-            self.finished.set()
-
-        def execute(self):
-            raise NotImplementedError()
+            self.__succeeded = self.__pattern.execute()
+            self.__finished.set()
 
         @property
         def succeeded(self):
-            if not self.finished.is_set():
+            if not self.__finished.is_set():
                 raise RuntimeError()
             return self.__succeeded
+
+        @property
+        def finished(self):
+            return self.__finished.is_set()
 
         @property
         def pattern(self):
@@ -43,75 +51,60 @@ class WorkflowPattern:
 
 
 class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
-    class State(WorkflowPattern.State):
-        def execute(self):
-            for child_pattern in self.pattern.children:
-                child = child_pattern.instantiate()
-                child.start()
-                child.join()
-                if not child.succeeded:
-                    return False
-            return True
+    def execute(self):
+        for child_pattern in self.children:
+            success = run_workflow_pattern(child_pattern)
+            if not success:
+                return False
+        return True
 
 
 class Parallelization(WorkflowPattern, namedtuple('Sequence', ('children'))):
-    class State(WorkflowPattern.State):
-        def execute(self):
-            children = [
-                child_pattern.instantiate()
-                for child_pattern in self.pattern.children
-            ]
-            for child in children:
-                child.start()
-            for child in children:
-                child.join()
-            return all(child.succeeded for child in children)
+    def execute(self):
+        return all(run_workflow_patterns(self.children))
 
 
 class Alternative(WorkflowPattern, namedtuple('Sequence', ('children'))):
-    class State(WorkflowPattern.State):
-        def execute(self):
-            children = [
-                child_pattern.instantiate()
-                for child_pattern in self.pattern.children
-            ]
-            for child in children:
-                child.start()
-            for child in children:
-                child.join()
-            return len([None for child in children if child.succeeded]) == 1
+    def execute(self):
+        return len([
+            None
+            for success in run_workflow_patterns(self.children)
+            if success
+        ]) == 1
 
 
 class Repetition(WorkflowPattern, namedtuple('Sequence', ('child', 'exit'))):
-    class State(WorkflowPattern.State):
-        def execute(self):
-            while True:
-                child = self.pattern.child.instantiate()
-                exit = self.pattern.exit.instantiate()
-                child.start()
-                exit.start()
-                child.join()
-                exit.join()
-                if child.succeeded and exit.succeeded:
-                    return False
-                if not child.succeeded and not exit.succeeded:
-                    return False
-                if not child.succeeded and exit.succeeded:
-                    return True
+    def execute(self):
+        while True:
+            child_success, exit_success = run_workflow_patterns([
+                self.child,
+                self.exit,
+            ])
+            if child_success and exit_success:
+                return False
+            if not child_success and not exit_success:
+                return False
+            if not child_success and exit_success:
+                return True
 
 
 class Command(WorkflowPattern, namedtuple('Sequence', ('command'))):
-    class State(WorkflowPattern.State):
-        def execute(self):
-            logger.info("starting %s", self.pattern.command)
-            process = subprocess.Popen(self.pattern.command)
-            status = process.wait()
-            logger.info("process %d exited with exit code %d", process.pid, status)
-            return status == 0
+    def execute(self):
+        logger.info("starting %s", self.command)
+        process = subprocess.Popen(self.command)
+        status = process.wait()
+        logger.info("process %d exited with exit code %d", process.pid, status)
+        return status == 0
+
+
+def run_workflow_patterns(patterns):
+    states = [pattern.instantiate() for pattern in patterns]
+    for state in states:
+        state.start()
+    for state in states:
+        state.join()
+    return [state.succeeded for state in states]
 
 
 def run_workflow_pattern(workflow_pattern):
-    state = workflow_pattern.instantiate()
-    state.start()
-    state.join()
-    return state.succeeded
+    return run_workflow_patterns([workflow_pattern])[0]
