@@ -46,9 +46,4 @@ if __name__ == '__main__':
     status = petriish.run_workflow_pattern(workflow)
 
     logging.debug("See ya. It was petriish speaking.")
-    if status == petriish.Status.SUCCEEDED:
-        sys.exit(0)
-    elif status == petriish.Status.FAILED:
-        sys.exit(1)
-    else:
-        assert False
+    sys.exit(0 if status else 1)

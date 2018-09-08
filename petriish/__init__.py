@@ -1,20 +1,10 @@
-import os
 import logging
 import subprocess
-from enum import Enum
-from collections import Counter, namedtuple
-
-from .utils import attr
+from collections import namedtuple
+import threading
 
 
 logger = logging.getLogger(__name__)
-
-
-class Status(Enum):
-    NEW = 1
-    RUNNING = 2
-    SUCCEEDED = 3
-    FAILED = 4
 
 
 class WorkflowPattern:
@@ -25,220 +15,103 @@ class WorkflowPattern:
             pattern=self,
         )
 
-    class State(attr('pattern')):
+    class State(threading.Thread):
         """Specific instance of worflow pattern"""
 
-        def start(self):
-            """Start computation. Must be non-blocking."""
-            raise NotImplementedError()
+        def __init__(self, pattern, **kwargs):
+            self.__pattern = pattern
+            self.finished = threading.Event()
+            self.__succeeded = None
+            super().__init__(**kwargs)
 
-        def process_ended(self, pid, status):
-            """Call to notify that a process has ended."""
+        def run(self):
+            self.__succeeded = self.execute()
+            self.finished.set()
+
+        def execute(self):
             raise NotImplementedError()
 
         @property
-        def status(self):
-            raise NotImplementedError()
+        def succeeded(self):
+            if not self.finished.is_set():
+                raise RuntimeError()
+            return self.__succeeded
+
+        @property
+        def pattern(self):
+            return self.__pattern
 
 
 class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
     class State(WorkflowPattern.State):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self._started = False
-            self._next_child = 0
-            self._child_state = None
-
-        def start(self):
-            assert not self._started
-            self._started = True
-            self._start_child()
-
-        def process_ended(self, pid, status):
-            if self._child_state is None:
-                return
-            self._child_state.process_ended(pid, status)
-            if self._child_state.status == Status.SUCCEEDED:
-                self._start_child()
-
-        @property
-        def status(self):
-            if not self._started:
-                return Status.NEW
-            if self._child_state is not None:
-                return self._child_state.status
-            if self._next_child >= len(self.pattern.children):
-                return Status.SUCCEEDED
-            assert False
-
-        def _start_child(self):
-            while True:
-                if self._next_child >= len(self.pattern.children):
-                    self._child_state = None
-                    return
-                self._child_state = self.pattern.children[self._next_child].instantiate()
-                self._next_child += 1
-                self._child_state.start()
-                if self._child_state.status != Status.SUCCEEDED:
-                    return
+        def execute(self):
+            for child_pattern in self.pattern.children:
+                child = child_pattern.instantiate()
+                child.start()
+                child.join()
+                if not child.succeeded:
+                    return False
+            return True
 
 
 class Parallelization(WorkflowPattern, namedtuple('Sequence', ('children'))):
     class State(WorkflowPattern.State):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self._children_states = None
-
-        def start(self):
-            assert self._children_states is None
-            self._children_states = [
-                child.instantiate()
-                for child in self.pattern.children
+        def execute(self):
+            children = [
+                child_pattern.instantiate()
+                for child_pattern in self.pattern.children
             ]
-            for s in self._children_states:
-                s.start()
-
-        def process_ended(self, pid, status):
-            for c in self._children_states:
-                c.process_ended(pid, status)
-
-        @property
-        def status(self):
-            if self._children_states is None:
-                return Status.NEW
-
-            counts = Counter(c.status for c in self._children_states)
-            all_count = len(self.pattern.children)
-            if counts[Status.SUCCEEDED] == all_count:
-                return Status.SUCCEEDED
-
-            if counts[Status.NEW] == all_count:
-                return Status.NEW
-            assert counts[Status.NEW] == 0
-
-            if counts[Status.RUNNING] > 0:
-                return Status.RUNNING
-            assert counts[Status.SUCCEEDED] + counts[Status.FAILED] == all_count
-
-            if counts[Status.FAILED] > 0:
-                return Status.FAILED
-            assert False
+            for child in children:
+                child.start()
+            for child in children:
+                child.join()
+            return all(child.succeeded for child in children)
 
 
 class Alternative(WorkflowPattern, namedtuple('Sequence', ('children'))):
     class State(WorkflowPattern.State):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self._children_states = None
-
-        def start(self):
-            assert self._children_states is None
-            self._children_states = [
-                child.instantiate()
-                for child in self.pattern.children
+        def execute(self):
+            children = [
+                child_pattern.instantiate()
+                for child_pattern in self.pattern.children
             ]
-            for s in self._children_states:
-                s.start()
-
-        def process_ended(self, pid, status):
-            for c in self._children_states:
-                c.process_ended(pid, status)
-
-        @property
-        def status(self):
-            if self._children_states is None:
-                return Status.NEW
-
-            counts = Counter(c.status for c in self._children_states)
-            all_count = len(self.pattern.children)
-            if all_count == 0:
-                return Status.FAILED
-
-            if counts[Status.NEW] == all_count:
-                return Status.NEW
-            assert counts[Status.NEW] == 0
-
-            if counts[Status.RUNNING] > 0:
-                return Status.RUNNING
-            assert counts[Status.SUCCEEDED] + counts[Status.FAILED] == all_count
-
-            if counts[Status.SUCCEEDED] == 1:
-                return Status.SUCCEEDED
-            else:
-                return Status.FAILED
+            for child in children:
+                child.start()
+            for child in children:
+                child.join()
+            return len([None for child in children if child.succeeded]) == 1
 
 
 class Repetition(WorkflowPattern, namedtuple('Sequence', ('child', 'exit'))):
     class State(WorkflowPattern.State):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self._child_state = None
-            self._exit_state = None
-
-        def start(self):
-            self._child_state = self.pattern.child.instantiate()
-            self._child_state.start()
-            self._exit_state = self.pattern.exit.instantiate()
-            self._exit_state.start()
-
-        def process_ended(self, pid, status):
-            self._child_state.process_ended(pid, status)
-            self._exit_state.process_ended(pid, status)
-            c = self._child_state.status
-            e = self._exit_state.status
-            if c == Status.SUCCEEDED and e == Status.FAILED:
-                self.start()
-
-        @property
-        def status(self):
-            if self._child_state is None:
-                assert self._exit_state is None
-                return Status.NEW
-            c = self._child_state.status
-            e = self._exit_state.status
-            if c == Status.SUCCEEDED and e == Status.SUCCEEDED:
-                return Status.FAILED
-            if c == Status.FAILED and e == Status.FAILED:
-                return Status.FAILED
-            if c == Status.FAILED and e == Status.SUCCEEDED:
-                return Status.SUCCEEDED
-            if c == Status.RUNNING or e == Status.RUNNING:
-                return Status.RUNNING
-            assert False
+        def execute(self):
+            while True:
+                child = self.pattern.child.instantiate()
+                exit = self.pattern.exit.instantiate()
+                child.start()
+                exit.start()
+                child.join()
+                exit.join()
+                if child.succeeded and exit.succeeded:
+                    return False
+                if not child.succeeded and not exit.succeeded:
+                    return False
+                if not child.succeeded and exit.succeeded:
+                    return True
 
 
 class Command(WorkflowPattern, namedtuple('Sequence', ('command'))):
     class State(WorkflowPattern.State):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            self._process = None
-
-        def start(self):
+        def execute(self):
             logger.info("starting %s", self.pattern.command)
-            self._process = subprocess.Popen(self.pattern.command)
-
-        def process_ended(self, pid, status):
-            if pid == self._process.pid:
-                self._process.poll()
-                self._process.returncode = os.WEXITSTATUS(status)  # this is needed, apparently
-                logger.info("process %d exited with exit code %d", pid, self._process.returncode)
-
-        @property
-        def status(self):
-            if self._process is None:
-                return Status.NEW
-            if self._process.returncode is None:
-                return Status.RUNNING
-            if self._process.returncode == 0:
-                return Status.SUCCEEDED
-            else:
-                return Status.FAILED
+            process = subprocess.Popen(self.pattern.command)
+            status = process.wait()
+            logger.info("process %d exited with exit code %d", process.pid, status)
+            return status == 0
 
 
 def run_workflow_pattern(workflow_pattern):
     state = workflow_pattern.instantiate()
     state.start()
-    while state.status == Status.RUNNING:
-        pid, exit_status = os.wait()
-        state.process_ended(pid, exit_status)
-    return state.status
+    state.join()
+    return state.succeeded

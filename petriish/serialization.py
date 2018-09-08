@@ -27,7 +27,8 @@ def kwargs_deserializer(constructor, mapping):
     return f
 
 
-id = lambda a: a
+def id(a):
+    return a
 
 
 deserializers = {
