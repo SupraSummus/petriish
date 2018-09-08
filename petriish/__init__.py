@@ -59,12 +59,12 @@ class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
         return True
 
 
-class Parallelization(WorkflowPattern, namedtuple('Sequence', ('children'))):
+class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'))):
     def execute(self):
         return all(run_workflow_patterns(self.children))
 
 
-class Alternative(WorkflowPattern, namedtuple('Sequence', ('children'))):
+class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
     def execute(self):
         return len([
             None
@@ -73,7 +73,7 @@ class Alternative(WorkflowPattern, namedtuple('Sequence', ('children'))):
         ]) == 1
 
 
-class Repetition(WorkflowPattern, namedtuple('Sequence', ('child', 'exit'))):
+class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
     def execute(self):
         while True:
             child_success, exit_success = run_workflow_patterns([
@@ -88,7 +88,7 @@ class Repetition(WorkflowPattern, namedtuple('Sequence', ('child', 'exit'))):
                 return True
 
 
-class Command(WorkflowPattern, namedtuple('Sequence', ('command'))):
+class Command(WorkflowPattern, namedtuple('Command', ('command'))):
     def execute(self):
         logger.info("starting %s", self.command)
         process = subprocess.Popen(self.command)
