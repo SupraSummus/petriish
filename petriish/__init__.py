@@ -43,6 +43,17 @@ class WorkflowPattern:
         """
         raise NotImplementedError()
 
+    @property
+    def input_type(self):
+        raise NotImplementedError()
+
+    @property
+    def output_type(self):
+        raise NotImplementedError()
+
+    def type_errors(self):
+        raise NotImplementedError()
+
     class State(threading.Thread):
         """Specific instance of worfklow pattern"""
 
@@ -85,6 +96,9 @@ class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
             input = result.output
         return Result(success=True, output=input)
 
+    @property
+    def input_type(self):
+        pass
 
 class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'))):
     def execute(self, input):
@@ -97,6 +111,8 @@ class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'
             output={k: v.output for k, v in results.items()},
         )
 
+    def input_type(self):
+        return self. mm
 
 class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
     def execute(self, input):
