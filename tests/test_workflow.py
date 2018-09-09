@@ -6,23 +6,22 @@ import petriish
 
 class DummyCommand(petriish.WorkflowPattern):
     def __init__(self, **kwargs):
-        self.result = None
-        self.semaphore = threading.Semaphore(value=0)
-        self.feedback_semaphore = threading.Semaphore(value=0)
+        self.__dummy_result = None
+        self.__dummy_result_semaphore = threading.Semaphore(value=0)
+        self.__feedback = None
+        self.__feedback_semaphore = threading.Semaphore(value=0)
 
     def trigger(self, result):
-        self.result = result
-        self.semaphore.release()
-        self.feedback_semaphore.acquire()
+        self.__feedback_semaphore.acquire()
+        self.__dummy_result = result
+        self.__dummy_result_semaphore.release()
+        return self.__feedback
 
-    def execute(self):
-        self.semaphore.acquire()
-        return self.result
-
-    class State(petriish.WorkflowPattern.State):
-        def run(self):
-            super().run()
-            self.pattern.feedback_semaphore.release()
+    def execute(self, input):
+        self.__feedback = input
+        self.__feedback_semaphore.release()
+        self.__dummy_result_semaphore.acquire()
+        return self.__dummy_result
 
 
 class WorkflowPatternAssertsMixin:
@@ -31,45 +30,48 @@ class WorkflowPatternAssertsMixin:
         with self.assertRaises(RuntimeError):
             state.succeeded
 
-    def assertSucceeded(self, state):
+    def assertSucceeded(self, state, output):
         state.join(timeout=1)
         self.assertTrue(state.finished)
         self.assertTrue(state.succeeded)
+        self.assertTrue(state.result.success)
+        self.assertEqual(state.result.output, output)
 
     def assertFailed(self, state):
         state.join(timeout=1)
         self.assertTrue(state.finished)
         self.assertFalse(state.succeeded)
+        self.assertFalse(state.result.success)
 
 
 class SequenceTestCase(TestCase, WorkflowPatternAssertsMixin):
     def test_empty(self):
         pattern = petriish.Sequence([])
-        state = pattern.instantiate()
+        state = pattern.instantiate('blah')
 
         self.assertNotFinished(state)
         state.start()
-        self.assertSucceeded(state)
+        self.assertSucceeded(state, 'blah')
 
     def test_subworkflows(self):
         sub_a = DummyCommand(name='a')
         sub_b = DummyCommand(name='b')
         pattern = petriish.Sequence([sub_a, sub_b])
-        state = pattern.instantiate()
+        state = pattern.instantiate('in')
 
         self.assertNotFinished(state)
         state.start()
         self.assertNotFinished(state)
-        sub_a.trigger(True)
+        self.assertEqual(sub_a.trigger(petriish.Result(True, 'a out')), 'in')
         self.assertNotFinished(state)
-        sub_b.trigger(False)
+        self.assertEqual(sub_b.trigger(petriish.Result(False)), 'a out')
         self.assertFailed(state)
 
 
 class AlternativeTestCase(TestCase, WorkflowPatternAssertsMixin):
     def test_empty(self):
         pattern = petriish.Alternative([])
-        state = pattern.instantiate()
+        state = pattern.instantiate('ble')
 
         self.assertNotFinished(state)
         state.start()
@@ -78,12 +80,12 @@ class AlternativeTestCase(TestCase, WorkflowPatternAssertsMixin):
 
 class ParallelizationTestCase(TestCase, WorkflowPatternAssertsMixin):
     def test_empty(self):
-        pattern = petriish.Parallelization([])
-        state = pattern.instantiate()
+        pattern = petriish.Parallelization({})
+        state = pattern.instantiate('ble')
 
         self.assertNotFinished(state)
         state.start()
-        self.assertSucceeded(state)
+        self.assertSucceeded(state, {})
 
 
 class RepetitionTestCase(TestCase, WorkflowPatternAssertsMixin):
@@ -94,52 +96,52 @@ class RepetitionTestCase(TestCase, WorkflowPatternAssertsMixin):
             child=self.child,
             exit=self.exit,
         )
-        self.state = self.pattern.instantiate()
+        self.state = self.pattern.instantiate('in')
 
         self.assertNotFinished(self.state)
         self.state.start()
         self.assertNotFinished(self.state)
 
     def test_success(self):
-        self.exit.trigger(True)
+        self.assertEqual(self.exit.trigger(petriish.Result(True, 'exit out')), 'in')
         self.assertNotFinished(self.state)
-        self.child.trigger(False)
-        self.assertSucceeded(self.state)
+        self.assertEqual(self.child.trigger(petriish.Result(False)), 'in')
+        self.assertSucceeded(self.state, 'exit out')
 
     def test_loop(self):
-        self.exit.trigger(False)
+        self.assertEqual(self.exit.trigger(petriish.Result(False)), 'in')
         self.assertNotFinished(self.state)
-        self.child.trigger(True)
+        self.assertEqual(self.child.trigger(petriish.Result(True, 'child out')), 'in')
         self.assertNotFinished(self.state)
 
-        # allow for thread termination
-        self.exit.trigger(True)
-        self.child.trigger(False)
+        # second loop
+        self.assertEqual(self.exit.trigger(petriish.Result(True, 'exit out')), 'child out')
+        self.assertEqual(self.child.trigger(petriish.Result(False)), 'child out')
 
     def test_fail_both(self):
-        self.exit.trigger(False)
+        self.assertEqual(self.exit.trigger(petriish.Result(False)), 'in')
         self.assertNotFinished(self.state)
-        self.child.trigger(False)
+        self.assertEqual(self.child.trigger(petriish.Result(False)), 'in')
         self.assertFailed(self.state)
 
     def test_fail_none(self):
-        self.exit.trigger(True)
+        self.assertEqual(self.exit.trigger(petriish.Result(True, 'exit out')), 'in')
         self.assertNotFinished(self.state)
-        self.child.trigger(True)
+        self.assertEqual(self.child.trigger(petriish.Result(True, 'child out')), 'in')
         self.assertFailed(self.state)
 
 
 class CommandTestCase(TestCase, WorkflowPatternAssertsMixin):
     def test_failure(self):
         pattern = petriish.Command('false')
-        state = pattern.instantiate()
+        state = pattern.instantiate('')
         self.assertNotFinished(state)
         state.start()
         self.assertFailed(state)
 
     def test_success(self):
         pattern = petriish.Command('true')
-        state = pattern.instantiate()
+        state = pattern.instantiate('')
         self.assertNotFinished(state)
         state.start()
-        self.assertSucceeded(state)
+        self.assertSucceeded(state, b'')

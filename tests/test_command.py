@@ -9,9 +9,11 @@ class PetriishCommandTestCase(TestCase):
             yml = "\n".join([
                 "type: parallelization",
                 "children:",
-                "  - type: command",
+                "  a:",
+                "    type: command",
                 "    command: [echo, aaa]",
-                "  - type: command",
+                "  b:",
+                "    type: command",
                 "    command: [echo, bbb]",
                 "",
             ])
@@ -19,10 +21,11 @@ class PetriishCommandTestCase(TestCase):
             f.flush()
             result = subprocess.run(
                 ['bin/petriish', f.name],
+                input='',
                 stdout=subprocess.PIPE,
             )
             self.assertEqual(result.returncode, 0)
             self.assertEqual(
-                sorted(result.stdout.decode('utf8').strip().split('\n')),
-                ['aaa', 'bbb'],
+                eval(result.stdout),
+                {'a': b'aaa\n', 'b': b'bbb\n'},
             )

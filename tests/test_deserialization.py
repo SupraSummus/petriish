@@ -8,13 +8,13 @@ class DeserializationTestCase(TestCase):
     def _test_deserialize_list(self, type, constructor):
         self.assertEqual(
             deserialize({
-                'type': 'sequence',
+                'type': type,
                 'children': [
                     {'type': 'sequence', 'children': []},
                     {'type': 'sequence', 'children': []},
                 ],
             }),
-            petriish.Sequence([
+            constructor([
                 petriish.Sequence([]),
                 petriish.Sequence([]),
             ]),
@@ -27,7 +27,19 @@ class DeserializationTestCase(TestCase):
         self._test_deserialize_list('alternative', petriish.Alternative)
 
     def test_deserialize_parallelization(self):
-        self._test_deserialize_list('parallelization', petriish.Parallelization)
+        self.assertEqual(
+            deserialize({
+                'type': 'parallelization',
+                'children': {
+                    'aaa': {'type': 'sequence', 'children': []},
+                    'bbb': {'type': 'sequence', 'children': []},
+                },
+            }),
+            petriish.Parallelization({
+                'aaa': petriish.Sequence([]),
+                'bbb': petriish.Sequence([]),
+            }),
+        )
 
     def test_deserialize_repetition(self):
         self.assertEqual(

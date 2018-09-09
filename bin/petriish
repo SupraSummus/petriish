@@ -43,7 +43,10 @@ if __name__ == '__main__':
     workflow = petriish.serialization.deserialize(description)
 
     logging.debug("Executing the workflow.")
-    status = petriish.run_workflow_pattern(workflow)
+    result = petriish.run_workflow_pattern(workflow, sys.stdin.read())
+
+    if result.success:
+        sys.stdout.write(repr(result.output))
 
     logging.debug("See ya. It was petriish speaking.")
-    sys.exit(0 if status else 1)
+    sys.exit(0 if result.success else 1)

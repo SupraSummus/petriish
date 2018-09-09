@@ -27,6 +27,13 @@ def kwargs_deserializer(constructor, mapping):
     return f
 
 
+def deserialize_dict_values(d):
+    return {
+        k: deserialize(v)
+        for k, v in d.items()
+    }
+
+
 def id(a):
     return a
 
@@ -34,7 +41,9 @@ def id(a):
 deserializers = {
     'sequence': list_deserializer(Sequence),
     'alternative': list_deserializer(Alternative),
-    'parallelization': list_deserializer(Parallelization),
+    'parallelization': kwargs_deserializer(Parallelization, {
+        'children': deserialize_dict_values,
+    }),
     'repetition': kwargs_deserializer(Repetition, {
         'child': deserialize,
         'exit': deserialize,

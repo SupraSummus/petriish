@@ -7,39 +7,65 @@ import threading
 logger = logging.getLogger(__name__)
 
 
+class Result:
+    def __init__(self, success, output=None):
+        self.__success = success
+        self.__output = output
+
+    @property
+    def success(self):
+        return self.__success
+
+    @property
+    def output(self):
+        return self.__output
+
+    def __repr__(self):
+        return 'Result(success={}, output={})'.format(
+            repr(self.success),
+            repr(self.output),
+        )
+
+
 class WorkflowPattern:
     """A type of workflow pattern"""
 
-    def instantiate(self):
+    def instantiate(self, input):
         return self.State(
             pattern=self,
+            input=input,
         )
 
-    def execute(self):
+    def execute(self, input):
         """Override this method to customize workflow type behaviour.
 
-        It should return weather the execution has been successful (bool).
+        It should return result of the execution.
         """
         raise NotImplementedError()
 
     class State(threading.Thread):
         """Specific instance of worfklow pattern"""
 
-        def __init__(self, pattern, **kwargs):
+        def __init__(self, pattern, input, **kwargs):
             self.__pattern = pattern
+            self.__input = input
             self.__finished = threading.Event()
-            self.__succeeded = None
+            self.__result = None
             super().__init__(**kwargs)
 
         def run(self):
-            self.__succeeded = self.__pattern.execute()
+            self.__result = self.__pattern.execute(self.__input)
             self.__finished.set()
 
         @property
-        def succeeded(self):
+        def result(self):
             if not self.__finished.is_set():
                 raise RuntimeError()
-            return self.__succeeded
+            return self.__result
+
+        @property
+        def succeeded(self):
+            return self.result.success
 
         @property
         def finished(self):
@@ -51,60 +77,88 @@ class WorkflowPattern:
 
 
 class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
-    def execute(self):
+    def execute(self, input):
         for child_pattern in self.children:
-            success = run_workflow_pattern(child_pattern)
-            if not success:
-                return False
-        return True
+            result = run_workflow_pattern(child_pattern, input)
+            if not result.success:
+                return result
+            input = result.output
+        return Result(success=True, output=input)
 
 
 class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'))):
-    def execute(self):
-        return all(run_workflow_patterns(self.children))
+    def execute(self, input):
+        results = run_workflow_patterns({
+            k: (v, input)
+            for k, v in self.children.items()
+        })
+        return Result(
+            success=all(r.success for r in results.values()),
+            output={k: v.output for k, v in results.items()},
+        )
 
 
 class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
-    def execute(self):
-        return len([
-            None
-            for success in run_workflow_patterns(self.children)
-            if success
-        ]) == 1
+    def execute(self, input):
+        results = run_workflow_patterns({
+            i: (v, input)
+            for i, v in enumerate(self.children)
+        })
+        results_ok = [
+            result
+            for result in results.values()
+            if result.success
+        ]
+        if len(results_ok) == 1:
+            return results_ok[0]
+        else:
+            return Result(success=False)
 
 
 class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
-    def execute(self):
+    def execute(self, input):
         while True:
-            child_success, exit_success = run_workflow_patterns([
-                self.child,
-                self.exit,
-            ])
+            results = run_workflow_patterns({
+                'child': (self.child, input),
+                'exit': (self.exit, input),
+            })
+            child_success = results['child'].success
+            exit_success = results['exit'].success
             if child_success and exit_success:
-                return False
+                return Result(success=False)
             if not child_success and not exit_success:
-                return False
+                return Result(success=False)
             if not child_success and exit_success:
-                return True
+                return results['exit']
+            input = results['child'].output
 
 
 class Command(WorkflowPattern, namedtuple('Command', ('command'))):
-    def execute(self):
+    def execute(self, input):
         logger.info("starting %s", self.command)
-        process = subprocess.Popen(self.command)
-        status = process.wait()
-        logger.info("process %d exited with exit code %d", process.pid, status)
-        return status == 0
+        process = subprocess.run(
+            self.command,
+            input=input,
+            stdout=subprocess.PIPE,
+        )
+        logger.info("command %s exited with code %d", self.command, process.returncode)
+        return Result(
+            success=(process.returncode == 0),
+            output=process.stdout,
+        )
 
 
 def run_workflow_patterns(patterns):
-    states = [pattern.instantiate() for pattern in patterns]
-    for state in states:
+    states = {
+        k: pattern.instantiate(input)
+        for k, (pattern, input) in patterns.items()
+    }
+    for state in states.values():
         state.start()
-    for state in states:
+    for state in states.values():
         state.join()
-    return [state.succeeded for state in states]
+    return {k: state.result for k, state in states.items()}
 
 
-def run_workflow_pattern(workflow_pattern):
-    return run_workflow_patterns([workflow_pattern])[0]
+def run_workflow_pattern(workflow_pattern, input):
+    return run_workflow_patterns({None: (workflow_pattern, input)})[None]
