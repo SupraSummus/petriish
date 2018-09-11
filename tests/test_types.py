@@ -1,5 +1,5 @@
 from unittest import TestCase
-from petriish.types import Resolver, TypeError, PolymorphicType, Record, Bytes
+from petriish.types import Resolver, PolymorphicType, Record, Bytes
 
 
 class TypesTestCase(TestCase):

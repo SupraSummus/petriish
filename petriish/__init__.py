@@ -100,6 +100,7 @@ class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
     def input_type(self):
         pass
 
+
 class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'))):
     def execute(self, input):
         results = run_workflow_patterns({
@@ -112,7 +113,8 @@ class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'
         )
 
     def input_type(self):
-        return self. mm
+        pass
+
 
 class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
     def execute(self, input):
