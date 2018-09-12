@@ -1,39 +1,37 @@
-class TypeError(Exception):
+class TypeResolutionError(Exception):
     pass
 
 
 class Resolver:
+    @classmethod
+    def is_polymorphic(cls, t):
+        return isinstance(t, PolymorphicType)
+
     def __init__(self):
         self._binds = {}  # dict polymorphic -> its best bind
 
     def unify(self, a, b):
-        if isinstance(a, PolymorphicType) and isinstance(b, PolymorphicType):
-            a = self._get_best_bind(a)
-            b = self._get_best_bind(b)
+        if self.is_polymorphic(b):
+            a, b = b, a
 
-            if not isinstance(a, PolymorphicType) or not isinstance(b, PolymorphicType):
-                # at least one of them is already bound
-                return self.unify(a, b)
+        if self.is_polymorphic(a):
+            a = self.get_best_bind(a)
 
-            return self._bind(a, b)
-
-        if isinstance(a, PolymorphicType):
-            a = self._get_best_bind(a)
-            # it's already bound
-            if not isinstance(a, PolymorphicType):
-                return self.unify(a, b)
-            return self._bind(a, b)
-
-        if isinstance(b, PolymorphicType):
-            return self.unify(b, a)
+            if self.is_polymorphic(a):
+                return self._bind(a, b)
 
         return a.unify_with(self, b)
 
     def _bind(self, polymorphic_type, value_type):
-        assert isinstance(polymorphic_type, PolymorphicType)
+        assert self.is_polymorphic(polymorphic_type)
 
-        if isinstance(value_type, PolymorphicType):
-            value_type, polymorphic_type = sorted([polymorphic_type, value_type], key=id)
+        if self.is_polymorphic(value_type):
+            if polymorphic_type == value_type:
+                return polymorphic_type
+
+            # always bind larger one to smaller one
+            if id(polymorphic_type) < id(value_type):
+                polymorphic_type, value_type = value_type, polymorphic_type
 
             if polymorphic_type in self._binds:
                 self._binds[polymorphic_type] = self._bind(value_type, self._binds[polymorphic_type])
@@ -42,10 +40,10 @@ class Resolver:
 
         else:
             if polymorphic_type in self._binds:
-                if isinstance(self._binds[polymorphic_type], PolymorphicType):
+                if self.is_polymorphic(self._binds[polymorphic_type]):
                     self._binds[polymorphic_type] = self._bind(self._binds[polymorphic_type], value_type)
                 else:
-                    raise TypeError('cannot bind {} with {} - {} is already {}'.format(
+                    raise TypeResolutionError('cannot bind {} with {} - {} is already {}'.format(
                         polymorphic_type, value_type,
                         polymorphic_type, self._binds[polymorphic_type],
                     ))
@@ -54,9 +52,9 @@ class Resolver:
 
         return self._binds[polymorphic_type]
 
-    def _get_best_bind(self, t):
+    def get_best_bind(self, t):
         if t in self._binds:
-            self._binds[t] = self._get_best_bind(self._binds[t])
+            self._binds[t] = self.get_best_bind(self._binds[t])
             return self._binds[t]
         else:
             return t
@@ -64,6 +62,11 @@ class Resolver:
 
 class Type:
     def unify_with(self, resolver, other):
+        raise NotImplementedError()
+
+    @property
+    def polymorphic_set(self):
+        """Set of all PolymorphicType instances inside this type"""
         raise NotImplementedError()
 
 
@@ -78,9 +81,11 @@ class Record(Type):
 
     def unify_with(self, resolver, other):
         if not isinstance(other, self.__class__):
-            raise TypeError()
+            raise TypeResolutionError('cannot unify {} with {}'.format(
+                self, other,
+            ))
         if self.fields.keys() != other.fields.keys():
-            raise TypeError()
+            raise TypeResolutionError()
         for k in self.fields.keys():
             resolver.unify(self.fields[k], other.fields[k])
 
