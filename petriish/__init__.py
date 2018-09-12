@@ -3,6 +3,8 @@ import subprocess
 from collections import namedtuple
 import threading
 
+from . import types
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +45,7 @@ class WorkflowPattern:
         """
         raise NotImplementedError()
 
-    @property
-    def input_type(self):
-        raise NotImplementedError()
-
-    @property
-    def output_type(self):
-        raise NotImplementedError()
-
-    def type_errors(self):
+    def output_type(self, resolver, input_type):
         raise NotImplementedError()
 
     class State(threading.Thread):
@@ -96,9 +90,10 @@ class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
             input = result.output
         return Result(success=True, output=input)
 
-    @property
-    def input_type(self):
-        pass
+    def output_type(self, resolver, input_type):
+        for child in self.children:
+            input_type = child.output_type(resolver, input_type)
+        return input_type
 
 
 class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'))):
@@ -112,8 +107,11 @@ class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'
             output={k: v.output for k, v in results.items()},
         )
 
-    def input_type(self):
-        pass
+    def output_type(self, resolver, input_type):
+        return types.Record(fields={
+            k: child.output_type(resolver, input_type)
+            for k, child in self.children.items()
+        })
 
 
 class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
@@ -131,6 +129,12 @@ class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
             return results_ok[0]
         else:
             return Result(success=False)
+
+    def output_type(self, resolver, input_type):
+        return resolver.unify_all([
+            child.output_type(resolver, input_type)
+            for child in self.children
+        ])
 
 
 class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
@@ -150,6 +154,13 @@ class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
                 return results['exit']
             input = results['child'].output
 
+    def output_type(self, resolver, input_type):
+        resolver.unify(
+            self.child.output_type(resolver, input_type),
+            input_type,
+        )
+        return self.exit.output_type(resolver, input_type)
+
 
 class Command(WorkflowPattern, namedtuple('Command', ('command'))):
     def execute(self, input):
@@ -164,6 +175,10 @@ class Command(WorkflowPattern, namedtuple('Command', ('command'))):
             success=(process.returncode == 0),
             output=process.stdout,
         )
+
+    def output_type(self, resolver, input_type):
+        resolver.unify(input_type, types.Bytes())
+        return types.Bytes()
 
 
 def run_workflow_patterns(patterns):

@@ -1,4 +1,4 @@
-from unittest import TestCase, skip
+from unittest import TestCase
 from petriish.types import Resolver, TypeResolutionError, PolymorphicType, Record, Bytes
 
 
@@ -30,31 +30,46 @@ class TypesTestCase(TestCase):
         self.assertEqual(self.resolver.get_best_bind(x), Bytes())
         self.assertEqual(self.resolver.get_best_bind(y), Record())
 
-    def test_unify_two_variables(self):
+    def test_unify_variables(self):
         x = PolymorphicType()
         y = PolymorphicType()
+        z = PolymorphicType()
         self.resolver.unify(x, y)
+        self.resolver.unify(y, z)
         self.assertEqual(self.resolver.get_best_bind(x), self.resolver.get_best_bind(y))
-        self.assertIn(self.resolver.get_best_bind(x), [x, y])
+        self.assertEqual(self.resolver.get_best_bind(z), self.resolver.get_best_bind(y))
+        self.assertIn(self.resolver.get_best_bind(x), [x, y, z])
+
+        # just to make sure it wont throw
+        self.resolver.unify(z, x)
+        self.resolver.unify(x, y)
 
     def test_reuse_resolver(self):
         x = PolymorphicType()
         y = PolymorphicType()
+
         self.resolver.unify(x, y)
         self.resolver.unify(y, Record())
         self.assertEqual(self.resolver.get_best_bind(x), Record())
 
-    def test_recursive_type(self):
+        r = Resolver()
+        r.unify(x, y)
+        r.unify(x, Record())
+        self.assertEqual(r.get_best_bind(y), Record())
+
+    def test_reuse_resolver_2(self):
         x = PolymorphicType()
         y = PolymorphicType()
-        self.resolver.unify(x, Record({'aaa': x}))
-        self.resolver.unify(
-            Record({'aaa': Record({'aaa': Record({'aaa': y})})}),
-            Record({'aaa': x}),
-        )
-        self.assertEqual(self.resolver.get_best_bind(x), self.resolver.get_best_bind(y))
 
-    @skip
+        self.resolver.unify(x, Record())
+        self.resolver.unify(x, y)
+        self.assertEqual(self.resolver.get_best_bind(y), Record())
+
+        r = Resolver()
+        r.unify(y, Record())
+        r.unify(x, y)
+        self.assertEqual(r.get_best_bind(x), Record())
+
     def test_fail_on_recursive_type(self):
         x = PolymorphicType()
         with self.assertRaises(TypeResolutionError):
