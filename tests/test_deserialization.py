@@ -2,6 +2,7 @@ from unittest import TestCase
 
 import petriish
 from petriish.serialization import deserialize
+from petriish.patterns.posix import SimpleCommand
 
 
 class DeserializationTestCase(TestCase):
@@ -60,7 +61,9 @@ class DeserializationTestCase(TestCase):
                 'type': 'command',
                 'command': ['echo', 'a', 'b', 'c'],
             }),
-            petriish.Command(
+            SimpleCommand(
                 command=['echo', 'a', 'b', 'c'],
+                pass_stdin=False,
+                capture_stdout=False,
             ),
         )

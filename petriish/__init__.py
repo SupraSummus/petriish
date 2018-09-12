@@ -1,7 +1,8 @@
 import logging
-import subprocess
 from collections import namedtuple
 import threading
+
+from . import types
 
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,9 @@ class WorkflowPattern:
 
         It should return result of the execution.
         """
+        raise NotImplementedError()
+
+    def output_type(self, resolver, input_type):
         raise NotImplementedError()
 
     class State(threading.Thread):
@@ -85,6 +89,11 @@ class Sequence(WorkflowPattern, namedtuple('Sequence', ('children'))):
             input = result.output
         return Result(success=True, output=input)
 
+    def output_type(self, resolver, input_type):
+        for child in self.children:
+            input_type = child.output_type(resolver, input_type)
+        return input_type
+
 
 class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'))):
     def execute(self, input):
@@ -96,6 +105,12 @@ class Parallelization(WorkflowPattern, namedtuple('Parallelization', ('children'
             success=all(r.success for r in results.values()),
             output={k: v.output for k, v in results.items()},
         )
+
+    def output_type(self, resolver, input_type):
+        return types.Record(fields={
+            k: child.output_type(resolver, input_type)
+            for k, child in self.children.items()
+        })
 
 
 class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
@@ -113,6 +128,12 @@ class Alternative(WorkflowPattern, namedtuple('Alternative', ('children'))):
             return results_ok[0]
         else:
             return Result(success=False)
+
+    def output_type(self, resolver, input_type):
+        return resolver.unify_all([
+            child.output_type(resolver, input_type)
+            for child in self.children
+        ])
 
 
 class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
@@ -132,20 +153,12 @@ class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
                 return results['exit']
             input = results['child'].output
 
-
-class Command(WorkflowPattern, namedtuple('Command', ('command'))):
-    def execute(self, input):
-        logger.info("starting %s", self.command)
-        process = subprocess.run(
-            self.command,
-            input=input,
-            stdout=subprocess.PIPE,
+    def output_type(self, resolver, input_type):
+        resolver.unify(
+            self.child.output_type(resolver, input_type),
+            input_type,
         )
-        logger.info("command %s exited with code %d", self.command, process.returncode)
-        return Result(
-            success=(process.returncode == 0),
-            output=process.stdout,
-        )
+        return self.exit.output_type(resolver, input_type)
 
 
 def run_workflow_patterns(patterns):

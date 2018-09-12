@@ -26,6 +26,6 @@ class PetriishCommandTestCase(TestCase):
             )
             self.assertEqual(result.returncode, 0)
             self.assertEqual(
-                eval(result.stdout),
-                {'a': b'aaa\n', 'b': b'bbb\n'},
+                sorted(result.stdout.split(b'\n')),
+                [b'', b'aaa', b'bbb'],
             )

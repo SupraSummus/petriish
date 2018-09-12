@@ -1,7 +1,5 @@
-from . import (
-    Sequence, Alternative, Parallelization,
-    Repetition, Command,
-)
+from . import Sequence, Alternative, Parallelization, Repetition
+from .patterns.posix import SimpleCommand
 from .utils import without_key
 
 
@@ -48,7 +46,9 @@ deserializers = {
         'child': deserialize,
         'exit': deserialize,
     }),
-    'command': kwargs_deserializer(Command, {
+    'command': kwargs_deserializer(SimpleCommand, {
         'command': id,
+        'pass_stdin': id,
+        'capture_stdout': id,
     }),
 }

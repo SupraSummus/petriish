@@ -2,6 +2,7 @@ import threading
 from unittest import TestCase
 
 import petriish
+from petriish.patterns.posix import SimpleCommand
 
 
 class DummyCommand(petriish.WorkflowPattern):
@@ -133,15 +134,15 @@ class RepetitionTestCase(TestCase, WorkflowPatternAssertsMixin):
 
 class CommandTestCase(TestCase, WorkflowPatternAssertsMixin):
     def test_failure(self):
-        pattern = petriish.Command('false')
-        state = pattern.instantiate('')
+        pattern = SimpleCommand('false')
+        state = pattern.instantiate(None)
         self.assertNotFinished(state)
         state.start()
         self.assertFailed(state)
 
     def test_success(self):
-        pattern = petriish.Command('true')
-        state = pattern.instantiate('')
+        pattern = SimpleCommand('true')
+        state = pattern.instantiate(None)
         self.assertNotFinished(state)
         state.start()
-        self.assertSucceeded(state, b'')
+        self.assertSucceeded(state, None)
