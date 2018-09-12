@@ -1,5 +1,4 @@
 import logging
-import subprocess
 from collections import namedtuple
 import threading
 
@@ -160,25 +159,6 @@ class Repetition(WorkflowPattern, namedtuple('Repetition', ('child', 'exit'))):
             input_type,
         )
         return self.exit.output_type(resolver, input_type)
-
-
-class Command(WorkflowPattern, namedtuple('Command', ('command'))):
-    def execute(self, input):
-        logger.info("starting %s", self.command)
-        process = subprocess.run(
-            self.command,
-            input=input,
-            stdout=subprocess.PIPE,
-        )
-        logger.info("command %s exited with code %d", self.command, process.returncode)
-        return Result(
-            success=(process.returncode == 0),
-            output=process.stdout,
-        )
-
-    def output_type(self, resolver, input_type):
-        resolver.unify(input_type, types.Bytes())
-        return types.Bytes()
 
 
 def run_workflow_patterns(patterns):
