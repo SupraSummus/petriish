@@ -1,0 +1,27 @@
+type: sequence
+children:
+
+  - type: http_queue_trigger
+    path: /hook
+    store_headers:
+      'X-GitHub-Event': event
+      'X-Hub-Signature': signature
+    store_payload: payload
+
+  - parallelization
+    children:
+      check_signature:
+
+        type: const
+        secret: qwerty
+
+        type: verify_hmac
+        algo: sha1
+        secret: qwerty
+        payload:
+        children:
+         - type: mapper
+           map:
+             
+  - type: json_mapper
+    

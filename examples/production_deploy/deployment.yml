@@ -1,0 +1,8 @@
+type: sequence
+children:
+  - !include fetch.yml
+  - !include automated_code_tests.yml
+  - !include backup.yml
+  - !include release.yml
+  - !include automated_deployment_tests.yml
+  - !include manual_deployment_tests.yml

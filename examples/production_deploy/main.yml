@@ -1,0 +1,10 @@
+type: repetition
+child:
+  type: sequence
+  children:
+    - !include get_new_version.yml
+    - !include deployment.yml
+exit:
+  # this workflow is supposed never to exit
+  type: command
+  command: ['false']
